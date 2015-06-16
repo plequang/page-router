@@ -61,6 +61,7 @@ gulp.task('serve', [], function () {
     // https: true,
     server: {
       baseDir: ['tests'],
+      directory: true,
       routes: {
         '/bower_components': 'bower_components',
         '/bower_components/page-router': 'src'
