@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+	<head>
+	  <meta charset="utf-8">
+	  <meta name="description" content="">
+	  <meta name="viewport" content="width=device-width, initial-scale=1">
+	  <link rel="import" href="bower_components/page-router/page-router.html">
+	  <link rel="import" href="elements/page-element1.html">
+	  <link rel="import" href="elements/page-element2.html">
+	  <link rel="import" href="bower_components/neon-animation/neon-animations.html">
+	</head>
+	<body>
+
+		<ul>
+			<li><a href="/">page-element1</a></li>
+			<li><a href="/test2">page-element2</a></li>
+		</ul>
+		<page-router entry-animation="slide-from-left-animation" exit-animation="slide-right-animation">
+			<page-route path="/" element="page-element1"></page-route>
+			<page-route path="/test2" element="page-element2"></page-route>
+		</page-router>
+	</body>
+
+</html>

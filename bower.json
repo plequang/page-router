@@ -1,0 +1,14 @@
+{
+  "name": "page-router",
+  "version": "0.0.0",
+  "dependencies": {
+    "polymer": "^1.0.0",
+    "page": "visionmedia/page.js#~1.6.3",
+    "iron-selector": "PolymerElements/iron-selector#^1.0.0",
+    "neon-animation": "PolymerElements/neon-animation#^1.0.0",
+    "iron-resizable-behavior": "PolymerElements/iron-resizable-behavior#^1.0.0"
+  },
+  "devDependencies": {
+    "pushstate-anchor": "~0.3.0"
+  }
+}
