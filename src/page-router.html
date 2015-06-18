@@ -51,7 +51,8 @@
 (function () {
 	"use strict";
 	// HACK: this is to keep jslint quiet
-	var polymer = Polymer;
+	var polymer = Polymer,
+		importedURIs = {};
 
 	polymer({
 		is: 'page-router',
@@ -71,6 +72,139 @@
 		listeners: {
 			'neon-animation-finish': '_onNeonAnimationFinish'
 		},
+
+		ready: function () {
+			this.attrForSelected = "path";
+		},
+
+		attached: function () {
+			console.log('attached');
+			this.start();
+		},
+
+
+		start: function () {
+			var routes,
+				route,
+				i;
+
+
+			page('*', this._routeChanged.bind(this));
+
+			routes = Polymer.dom(this).querySelectorAll('page-route');
+
+			console.log(routes);
+
+			for (i = 0; i < routes.length; i += 1) {
+				route = routes[i];
+				page(route.getAttribute('path'), this._changeRoute.bind(this, route));
+			}
+			//page.base('#!');
+			page.start({
+				hashbang: true
+			});
+			console.log('router initialized');
+		},
+
+		show: function (path) {
+			page.show(path);
+		},
+
+		addRoute: function (path, element, importUri) {
+			console.log('add route');
+		},
+
+		_routeChanged: function (context, next) {
+
+			console.log('route changed', context, next);
+			next();
+		},
+
+		_changeRoute: function (newRoute, context, next) {
+			var importUri;
+			console.log('change route', arguments);
+			if (newRoute !== this._currentRoute) {
+				importUri = newRoute.getAttribute('import');
+				if (importUri) {
+					this._importAndActivate(newRoute, importUri, context);
+				} else {
+					this._activateElement(newRoute, newRoute.getAttribute('element'), context);
+				}
+
+			} else {
+				// Same route, so simply update the model
+				newRoute.firstElementChild.params = context.params;
+				this.fire('activate-route-end', {}, { bubbles: false, cancelable: true});
+				newRoute.fire('activate-route-end', {}, { bubbles: false, cancelable: true});
+				console.log('route did not change, updating model.');
+			}
+
+		},
+		_importAndActivate: function (route, importUri, context) {
+			var router = this,
+				importLink;
+
+			function importLoadedCallback(e) {
+				importLink.loaded = true;
+				console.log('route imported', route);
+				router._activateElement(route, route.getAttribute('element'), context);
+			}
+
+			function importErrorCallback(e) {
+				var
+					detail = {
+						route: route
+					},
+					options = {
+						bubbles : false,
+						cancelable: true
+					};
+				importLink.notFound = true;
+				router.fire('import-error', detail, options);
+				route.fire('import-error', detail, options);
+				console.log('import error', e, route);
+			}
+
+			if (!importedURIs.hasOwnProperty(importUri)) {
+				importLink = document.createElement('link');
+				importLink.setAttribute('rel', 'import');
+				importLink.setAttribute('href', importUri);
+				importLink.setAttribute('async', 'async');
+				importLink.addEventListener('load', importLoadedCallback);
+				importLink.addEventListener('error', importErrorCallback);
+				importLink.loaded = false;
+				document.head.appendChild(importLink);
+				importedURIs[importUri] = importLink;
+			} else {
+				// previously imported. this is an async operation and may not be complete yet.
+				console.log('route already imported', route);
+				importLink = importedURIs[importUri];
+				if (importLink.notFound) {
+					importErrorCallback(null, route);
+				} else if (!importLink.loaded) {
+					importLink.addEventListener('load', importLoadedCallback);
+					importLink.addEventListener('error', importErrorCallback);
+				} else {
+					this._activateElement(route, route.getAttribute('element'), context);
+				}
+			}
+
+		},
+
+		_activateElement: function (route, routeElementName, context) {
+			var routeElement = document.createElement(routeElementName);
+
+			routeElement.params = context.params;
+			route.appendChild(routeElement);
+			this.selected = route.path;
+
+			this._previousRoute = this._currentRoute;
+			this._currentRoute =  route;
+		},
+
+		//
+		// Code copied from neon-animated-page, to implement animation when changing route
+		//
 		_selectedChanged: function (selected) {
 			var selectedPage = this.selectedItem,
 				oldPage = this._prevSelected || false;
@@ -147,6 +281,7 @@
 				this._completeSelectedChanged(oldPage, selectedPage);
 			}
 		},
+
 		_completeSelectedChanged: function (oldPage, selectedPage) {
 			var node, index = 0, nodes, child, childToRemove;
 			if (selectedPage) {
@@ -173,6 +308,7 @@
 			}
 			this.async(this.notifyResize);
 		},
+
 		_onNeonAnimationFinish: function (event) {
 			if (this._squelchNextFinishEvent) {
 				this._squelchNextFinishEvent = false;
@@ -180,52 +316,9 @@
 			}
 			this._completeSelectedChanged(event.detail.fromPage, event.detail.toPage);
 			console.log('_onNeonAnimationFinish');
-		},
-
-		ready: function () {
-			this.attrForSelected = "path";
-		},
-		_changeRoute: function (path, routeElementName, route, context, next) {
-			var routeElement;
-			console.log('change route', arguments);
-			if (route !== this._currentRoute) {
-				routeElement = document.createElement(routeElementName);
-				route.appendChild(routeElement);
-				this.selected = path;
-
-				this._previousRoute = this._currentRoute;
-				this._currentRoute =  route;
-			} else {
-				console.log('route did not change.');
-			}
-
-		},
-		init: function () {
-			var routes,
-				route,
-				path,
-				routeElementName,
-				i;
-
-			routes = Polymer.dom(this).querySelectorAll('page-route');
-			console.log(routes);
-
-			for (i = 0; i < routes.length; i += 1) {
-				route = routes[i];
-				path = route.getAttribute('path');
-				routeElementName = route.getAttribute('element');
-				page(path, this._changeRoute.bind(this, path, routeElementName, route));
-			}
-			//page.base('#!');
-			page.start({
-				hashbang: true
-			});
-			console.log('router initialized');
-		},
-		attached: function () {
-			console.log('attached');
-			this.init();
 		}
+
+
 
 	});
 }());

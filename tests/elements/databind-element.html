@@ -1,0 +1,30 @@
+<link ref="../bower_components/polymer/polymer.html">
+
+<dom-module id="databind-element">
+	<style>
+		:host {
+			display: block;
+			background-color: yellow;
+		}
+	</style>
+	<template>
+		<h2>Dtabind element</h2>
+
+		<div>
+			Num parameter is <span>{{params.num}}</span>.
+		</div>
+	</template>
+	<script>
+/*global Polymer, page, document */
+(function () {
+	"use strict";
+	var polymer = Polymer;
+	polymer({
+		is: 'databind-element',
+		properties: {
+			num: Number
+		}
+	});
+}());
+</script>
+</dom-module>
