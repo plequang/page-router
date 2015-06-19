@@ -128,7 +128,8 @@
 			page(route.path, this._changeRoute.bind(this, newRouteElement));
 			page.stop();
 			page.start({
-				dispatch: false
+				dispatch: false,
+				hashbang: true
 			});
 			page.show(route.path);
 
