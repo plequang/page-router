@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+	<head>
+	  <meta charset="utf-8">
+	  <meta name="description" content="">
+	  <meta name="viewport" content="width=device-width, initial-scale=1">
+	  <link rel="import" href="bower_components/page-router/page-router.html">
+	  <link rel="import" href="elements/page-element1.html">
+	  <link rel="import" href="bower_components/neon-animation/neon-animations.html">
+	</head>
+	<body>
+		<h1> Simple test </h1>
+		<ul>
+			<li><a href="/">/</a></li>
+			<li><a href="/page-element2">/page-element2</a></li>
+			<li><a href="/page-element3">/page-element3 (imported dynamically)</a></li>
+		</ul>
+		<page-router entry-animation="slide-from-left-animation" exit-animation="slide-right-animation" on-missing-import="onMissingImport">
+			<page-route path="/" element="page-element1"></page-route>
+			<page-route path="/page-element2" element="page-element2" import="elements/page-element2.html"></page-route>
+		</page-router>
+	</body>
+	<script>
+/*global document */
+(function () {
+	"use strict";
+	var router = document.querySelector('page-router');
+	router.addEventListener('missing-import', function (e) {
+		console.log('missing import', e);
+	});
+
+	router.addEventListener('route-changing', function (event) {
+		console.log('route changing', event);
+		if (!router.hasRoute(event.detail.context.path)) {
+			event.preventDefault();
+			event.detail.context.handled = true;
+			router.addAndShowRoute({
+				path: event.detail.context.path,
+				import: 'elements' + event.detail.context.path + '.html',
+				element: event.detail.context.path.substring(1).replace(/\//g, '-')
+			});
+		}
+	});
+
+}());
+</script>
+</html>

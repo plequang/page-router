@@ -89,7 +89,8 @@
 				i;
 
 
-			page('*', this._routeChanged.bind(this));
+			// Catch-all middleware to notify other we are changing route
+			page('*', this._routeChanging.bind(this));
 
 			routes = Polymer.dom(this).querySelectorAll('page-route');
 
@@ -99,7 +100,7 @@
 				route = routes[i];
 				page(route.getAttribute('path'), this._changeRoute.bind(this, route));
 			}
-			//page.base('#!');
+
 			page.start({
 				hashbang: true
 			});
@@ -110,14 +111,52 @@
 			page.show(path);
 		},
 
-		addRoute: function (path, element, importUri) {
-			console.log('add route');
+		hasRoute: function (path) {
+			var route = Polymer.dom(this).querySelector('page-route[path="' + path + '"]');
+			return !!route;
 		},
 
-		_routeChanged: function (context, next) {
+		addAndShowRoute: function (route) {
+			console.log('add route');
+			var newRouteElement = document.createElement('page-route');
+			newRouteElement.setAttribute('path', route.path);
+			newRouteElement.setAttribute('element', route.element);
+			if (route.import) {
+				newRouteElement.setAttribute('import', route.import);
+			}
+			Polymer.dom(this).appendChild(newRouteElement);
+			page(route.path, this._changeRoute.bind(this, newRouteElement));
+			page.stop();
+			page.start({
+				dispatch: false
+			});
+			page.show(route.path);
 
-			console.log('route changed', context, next);
-			next();
+		},
+
+		/**
+		 * page.js middleware registered as first catch-all rule.
+		 * It allows to notify others that we are changing route, enabling them
+		 * to possible dynamically add a route.
+		 */
+		_routeChanging: function (context, next) {
+
+			var evt = this.fire(
+				'route-changing',
+				{
+					context: context
+				},
+				{
+					bubbles: false,
+					cancelable: true
+				}
+			);
+
+			if (!evt.defaultPrevented) {
+				next();
+			} else {
+				context.handled = true;
+			}
 		},
 
 		_changeRoute: function (newRoute, context, next) {
@@ -134,8 +173,8 @@
 			} else {
 				// Same route, so simply update the model
 				newRoute.firstElementChild.params = context.params;
-				this.fire('activate-route-end', {}, { bubbles: false, cancelable: true});
-				newRoute.fire('activate-route-end', {}, { bubbles: false, cancelable: true});
+				this.fire('route-changed', {}, { bubbles: false, cancelable: true});
+				newRoute.fire('route-changed', {}, { bubbles: false, cancelable: true});
 				console.log('route did not change, updating model.');
 			}
 
@@ -188,7 +227,6 @@
 					this._activateElement(route, route.getAttribute('element'), context);
 				}
 			}
-
 		},
 
 		_activateElement: function (route, routeElementName, context) {
@@ -197,6 +235,9 @@
 			routeElement.params = context.params;
 			route.appendChild(routeElement);
 			this.selected = route.path;
+
+			this.fire('route-changed', {}, { bubbles: false, cancelable: true});
+			route.fire('route-changed', {}, { bubbles: false, cancelable: true});
 
 			this._previousRoute = this._currentRoute;
 			this._currentRoute =  route;
