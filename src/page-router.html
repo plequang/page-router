@@ -6,9 +6,6 @@
 <link rel="import" href="../iron-resizable-behavior/iron-resizable-behavior.html">
 <link rel="import" href="../iron-selector/iron-selectable.html">
 
-<script src="../page/page.js"></script>
-
-
 <dom-module id="page-route">
 	<style>
 		:host {
@@ -31,7 +28,15 @@
 		properties: {
 			path: String,
 			element: String,
-			import: String
+			import: String,
+			redirect: String,
+			onUrlChange: String,
+			active: Boolean,
+			regex: Boolean,
+			template: String
+		},
+		attached: function () {
+			console.log('page-route attached', this);
 		},
 		behaviors: [
 			Polymer.NeonAnimatableBehavior
@@ -47,28 +52,86 @@
 		<content></content>
 	</template>
 	<script>
-/*global Polymer, page, document */
+/*global Polymer, document, window, URL */
 (function () {
 	"use strict";
 	// HACK: this is to keep jslint quiet
 	var polymer = Polymer,
-		importedURIs = {};
+		importedURIs = {},
+		utilities = {},
+		previousUrl = {};
+
+	// scroll to the element with id="hash" or name="hash"
+	function scrollToHash(hash) {
+		if (!hash) {
+			return;
+		}
+
+		// wait for the browser's scrolling to finish before we scroll to the hash
+		// ex: http://example.com/#/page1#middle
+		// the browser will scroll to an element with id or name `/page1#middle` when the page finishes loading. if it doesn't exist
+		// it will scroll to the top of the page. let the browser finish the current event loop and scroll to the top of the page
+		// before we scroll to the element with id or name `middle`.
+		setTimeout(function () {
+			var hashElement = document.querySelector('html /deep/ ' + hash) || document.querySelector('html /deep/ [name="' + hash.substring(1) + '"]');
+			if (hashElement && hashElement.scrollIntoView) {
+				hashElement.scrollIntoView(true);
+			}
+		}, 0);
+	}
+
+	/**
+	 * Utility function that fires an event from a polymer element and return false if preventDefault has been called on the event.
+	 */
+	function fireEvent(target, type, detail) {
+		var evt = target.fire(type, detail, { bubbles: false, cancelable: true});
+		return !evt.defaultPrevented;
+	}
 
 	polymer({
 		is: 'page-router',
+
 		behaviors: [
 			Polymer.IronResizableBehavior,
 			Polymer.IronSelectableBehavior,
 			Polymer.NeonAnimationRunnerBehavior
 		],
-		properties: {
 
+		properties: {
+			mode: {
+				type: String,
+				value: 'auto'
+			},
+			typecast: {
+				type: String,
+				value: 'auto'
+			},
+			bindRouter: {
+				type: Boolean,
+				value: false
+			},
+			_useAnimation: {
+				type: Boolean,
+				computed: '_computeUseAnimation(entryAnimation, exitAnimation)'
+			},
+			init: {
+				type: String,
+				value: 'auto'
+			}
 		},
+
+		_computeUseAnimation: function (entryAnimation, exitAnimation) {
+			return entryAnimation && exitAnimation;
+		},
+
 		_previousRoute: null,
+
 		_currentRoute: null,
+
 		observers: [
 			'_selectedChanged(selected)'
 		],
+
 		listeners: {
 			'neon-animation-finish': '_onNeonAnimationFinish'
 		},
@@ -79,133 +142,159 @@
 
 		attached: function () {
 			console.log('attached');
-			this.start();
-		},
 
+			if (this.init !== 'manual') {
+				// HACK: beware of elements initialization order, specially between page-router and its page-route's.
+				// Using async to be sure the page-route  are initialized when calling the stateChange handler for the first time.
+				this.async(function () {
+					this.initialize();
+				});
 
-		start: function () {
-			var routes,
-				route,
-				i;
-
-
-			// Catch-all middleware to notify other we are changing route
-			page('*', this._routeChanging.bind(this));
-
-			routes = Polymer.dom(this).querySelectorAll('page-route');
-
-			console.log(routes);
-
-			for (i = 0; i < routes.length; i += 1) {
-				route = routes[i];
-				page(route.getAttribute('path'), this._changeRoute.bind(this, route));
-			}
-
-			page.start({
-				hashbang: true
-			});
-			console.log('router initialized');
-		},
-
-		show: function (path) {
-			page.show(path);
-		},
-
-		hasRoute: function (path) {
-			var route = Polymer.dom(this).querySelector('page-route[path="' + path + '"]');
-			return !!route;
-		},
-
-		addAndShowRoute: function (route) {
-			console.log('add route');
-			var newRouteElement = document.createElement('page-route');
-			newRouteElement.setAttribute('path', route.path);
-			newRouteElement.setAttribute('element', route.element);
-			if (route.import) {
-				newRouteElement.setAttribute('import', route.import);
-			}
-			Polymer.dom(this).appendChild(newRouteElement);
-			page(route.path, this._changeRoute.bind(this, newRouteElement));
-			page.stop();
-			page.start({
-				dispatch: false,
-				hashbang: true
-			});
-			page.show(route.path);
-
-		},
-
-		/**
-		 * page.js middleware registered as first catch-all rule.
-		 * It allows to notify others that we are changing route, enabling them
-		 * to possible dynamically add a route.
-		 */
-		_routeChanging: function (context, next) {
-
-			var evt = this.fire(
-				'route-changing',
-				{
-					context: context
-				},
-				{
-					bubbles: false,
-					cancelable: true
-				}
-			);
-
-			if (!evt.defaultPrevented) {
-				next();
-			} else {
-				context.handled = true;
 			}
 		},
 
-		_changeRoute: function (newRoute, context, next) {
-			var importUri;
-			console.log('change route', arguments);
-			if (newRoute !== this._currentRoute) {
-				importUri = newRoute.getAttribute('import');
-				if (importUri) {
-					this._importAndActivate(newRoute, importUri, context);
+		initialize: function () {
+			if (this.isInitialized) {
+				return;
+			}
+
+			var boundStateChangeHandler = this._stateChange.bind(this);
+			window.addEventListener('popstate', boundStateChangeHandler);
+			boundStateChangeHandler();
+
+			console.log('router initialized', this);
+		},
+
+		go: function (path, options) {
+			var eventDetail, eventOptions;
+			if (this.mode !== 'pushstate') {
+				// mode == auto, hash or hashbang
+				if (this.mode === 'hashbang') {
+					path = '#!' + path;
 				} else {
-					this._activateElement(newRoute, newRoute.getAttribute('element'), context);
+					path = '#' + path;
 				}
-
+			}
+			if (options && options.replace === true) {
+				window.history.replaceState(null, null, path);
 			} else {
-				// Same route, so simply update the model
-				newRoute.firstElementChild.params = context.params;
-				this.fire('route-changed', {}, { bubbles: false, cancelable: true});
-				newRoute.fire('route-changed', {}, { bubbles: false, cancelable: true});
-				console.log('route did not change, updating model.');
+				window.history.pushState(null, null, path);
 			}
 
+			// dispatch a popstate event
+			eventDetail = {
+				state: {}
+			};
+			eventOptions = {
+				node: window,
+				bubbles: false,
+				cancelable: false
+			};
+			this.fire('popstate', eventDetail, eventOptions);
 		},
-		_importAndActivate: function (route, importUri, context) {
+
+
+		_stateChange: function () {
+			var url = utilities.parseUrl(window.location.href, this.mode),
+				eventDetail,
+				route;
+
+		    // don't load a new route if only the hash fragment changed
+			if (url.hash !== previousUrl.hash && url.path === previousUrl.path && url.search === previousUrl.search && url.isHashPath === previousUrl.isHashPath) {
+				scrollToHash(url.hash);
+				previousUrl = url;
+				return;
+			}
+			previousUrl = url;
+
+			// fire a state-change event on the app-router and return early if the user called event.preventDefault()
+			eventDetail = {
+				path: url.path
+			};
+			if (!fireEvent(this, 'state-change', eventDetail)) {
+				return;
+			}
+
+			// find the first matching route
+			route = Polymer.dom(this).firstElementChild;
+			while (route) {
+				if (route.tagName === 'PAGE-ROUTE' && utilities.testRoute(route.path, url.path, this.trailingSlash, !!this.regex)) {
+					this._activateRoute(route, url);
+					return;
+				}
+				route = route.nextSibling;
+			}
+
+			fireEvent(this, 'not-found', eventDetail);
+		},
+
+		_activateRoute: function (route, url) {
+			if (route.redirect) {
+				this.go(route.redirect, {replace: true});
+				return;
+			}
+
+			// if we're on the same route and `onUrlChange="noop"` then don't reload the route or update the model
+			if (route === this._activeRoute && route.onUrlChange === 'noop') {
+				return;
+			}
+
+			var eventDetail = {
+				path: url.path,
+				route: route,
+				oldRoute: this._activeRoute
+			};
+
+			if (!fireEvent(this, 'activate-route-start', eventDetail)) {
+				return;
+			}
+			if (!fireEvent(route, 'activate-route-start', eventDetail)) {
+				return;
+			}
+
+			// keep track of the route currently being loaded
+			this._loadingRoute = route;
+
+			// if we're on the same route and `onUrlChange="updateModel"` then update the model but don't replace the page content
+			if (route === this._activeRoute && route.onUrlChange === 'updateModel') {
+				this._updateModelAndActivate(route, url, eventDetail);
+			} else if (route.import) {
+				// import custom element or template
+				this._importAndActivate(route, url, eventDetail);
+			} else if (route.element) {
+				// pre-loaded custom element
+				this._activateCustomElement(route, url, eventDetail, route.element);
+			}
+		},
+
+		_updateModelAndActivate: function (route, url, eventDetail) {
+			var model = this._createModel(route, url, eventDetail);
+			this.setObjectProperties(Polymer.dom(this).firstElementChild, model);
+		},
+
+		_importAndActivate: function (route, url, eventDetail) {
 			var router = this,
-				importLink;
+				importLink,
+				importUri = route.import;
 
 			function importLoadedCallback(e) {
 				importLink.loaded = true;
 				console.log('route imported', route);
-				router._activateElement(route, route.getAttribute('element'), context);
+				router._activateImport(route, url, eventDetail);
 			}
 
 			function importErrorCallback(e) {
-				var
-					detail = {
+				var	importErrorEvent = {
 						route: route
-					},
-					options = {
-						bubbles : false,
-						cancelable: true
 					};
+
 				importLink.notFound = true;
-				router.fire('import-error', detail, options);
-				route.fire('import-error', detail, options);
+				fireEvent(router, 'import-error', importErrorEvent);
+				fireEvent(route, 'import-error', importErrorEvent);
 				console.log('import error', e, route);
 			}
 
-			if (!importedURIs.hasOwnProperty(importUri)) {
+			if (!importedURIs.hasOwnProperty(route.import)) {
 				importLink = document.createElement('link');
 				importLink.setAttribute('rel', 'import');
 				importLink.setAttribute('href', importUri);
@@ -225,23 +314,116 @@
 					importLink.addEventListener('load', importLoadedCallback);
 					importLink.addEventListener('error', importErrorCallback);
 				} else {
-					this._activateElement(route, route.getAttribute('element'), context);
+					this._activateImport(route, url, eventDetail);
 				}
 			}
 		},
 
-		_activateElement: function (route, routeElementName, context) {
-			var routeElement = document.createElement(routeElementName);
+		_activateImport: function (route, url, eventDetail, importLink) {
+			route.importLink = importLink;
+			// make sure the user didn't navigate to a different route while it loaded
+			if (route === this._loadingRoute) {
+				if (route.template) {
+					console.log('route template, not implemented yet.');
+				} else {
+					// custom element
+					this._activateCustomElement(route, url, eventDetail, route.element || route.import.split('/').slice(-1)[0].replace('.html', ''));
+				}
+			}
+		},
 
-			routeElement.params = context.params;
-			route.appendChild(routeElement);
-			this.selected = route.path;
+		_activateCustomElement: function (route, url, eventDetail, elementName) {
+			var customElement = document.createElement(elementName),
+				model = this._createModel(route, url, eventDetail);
 
-			this.fire('route-changed', {}, { bubbles: false, cancelable: true});
-			route.fire('route-changed', {}, { bubbles: false, cancelable: true});
+			this._setObjectProperties(customElement, model);
 
-			this._previousRoute = this._currentRoute;
-			this._currentRoute =  route;
+			this._activateElement(route, url, eventDetail, customElement);
+		},
+
+		_activateElement: function (route, url, eventDetail, customElement) {
+			// previousRoute's content is removed in _completeSelectedChanged. When using neon-animation, this is done when animations are finished.
+			// If you navigate between 3 routes quickly (ex: /a -> /b -> /c) you might set previousRoute to '/b' before '/a' is
+			// removed from the DOM. this verifies old content is removed before switching the reference to previousRoute.
+			this._deactivateRoute(this._previousRoute);
+			// update references to the activeRoute, previousRoute, and loadingRoute
+			this._previousRoute = this._activeRoute;
+			this._activeRoute = this._loadingRoute;
+			this._loadingRoute = null;
+			if (this._previousRoute) {
+				this._previousRoute.active = false;
+			}
+
+			this._activeRoute.active = true;
+
+			if (!this._useAnimation || eventDetail.route === eventDetail.oldRoute) {
+				this._deactivateRoute(this._previousRoute);
+			}
+
+			// add the new content
+			Polymer.dom(this._activeRoute).appendChild(customElement);
+
+			this.selected = this._activeRoute.path;
+
+			// scroll to the URL hash if it's present
+			if (url.hash && !this._useAnimation) {
+				scrollToHash(url.hash);
+			}
+
+			this.fire('activate-route-end', eventDetail);
+			this.fire('activate-route-end', eventDetail);
+		},
+
+		// Remove the route's content
+		_deactivateRoute: function (route) {
+			var node, nodeToRemove;
+			if (route) {
+				// remove the route content
+				node = Polymer.dom(route).firstChild;
+
+				// don't remove an inline <template>
+				if (route.isInlineTemplate) {
+					node = Polymer.dom(route).querySelector('template').nextSibling;
+				}
+
+				while (node) {
+					nodeToRemove = node;
+					node = Polymer.dom(node).nextSibling;
+					Polymer.dom(route).removeChild(nodeToRemove);
+				}
+			}
+		},
+
+
+		_createModel: function (route, url, eventDetail) {
+			var model = {},
+				params = utilities.routeArguments(
+					route.path,
+					url.path,
+					url.search,
+					!!route.regex,
+					this.typecast === 'auto'
+				);
+
+			model.params = params;
+
+			if (!!route.bindRouter || !!this.bindRouter) {
+				model.router = this;
+			}
+
+			eventDetail.model = model;
+			fireEvent(this, 'before-data-binding', eventDetail);
+			fireEvent(route, 'before-data-binding', eventDetail);
+			return eventDetail.model;
+		},
+
+		_setObjectProperties: function (object, model) {
+			var property;
+			for (property in model) {
+				if (model.hasOwnProperty(property)) {
+					object[property] = model[property];
+				}
+			}
 		},
 
 		//
@@ -325,7 +507,7 @@
 		},
 
 		_completeSelectedChanged: function (oldPage, selectedPage) {
-			var node, index = 0, nodes, child, childToRemove;
+			var nodes, node, index = 0;
 			if (selectedPage) {
 				selectedPage.classList.remove('neon-animating');
 			}
@@ -339,15 +521,10 @@
 				}
 			}
 
-			// Removes previous route children only when animation finished.
-			if (this._previousRoute) {
-				child = this._previousRoute.firstChild;
-				while (child) {
-					childToRemove = child;
-					child = child.nextSibling;
-					this._previousRoute.removeChild(childToRemove);
-				}
+			if (this._previousRoute && !this._previousRoute.active) {
+				this._deactivateRoute(this._previousRoute);
 			}
+
 			this.async(this.notifyResize);
 		},
 
@@ -359,10 +536,255 @@
 			this._completeSelectedChanged(event.detail.fromPage, event.detail.toPage);
 			console.log('_onNeonAnimationFinish');
 		}
-
-
-
 	});
+
+	// @license MIT
+	// @copyright Erik Ringsmuth 2015
+	//
+	// parseUrl(location, mode) - Augment the native URL() constructor to get info about hash paths
+	//
+	// Example parseUrl('http://domain.com/other/path?queryParam3=false#/example/path?queryParam1=true&queryParam2=example%20string#middle', 'auto')
+	//
+	// returns {
+	//   path: '/example/path',
+	//   hash: '#middle'
+	//   search: '?queryParam1=true&queryParam2=example%20string',
+	//   isHashPath: true
+	// }
+	//
+	// Note: The location must be a fully qualified URL with a protocol like 'http(s)://'
+	utilities.parseUrl = function (location, mode) {
+		var url = {
+				isHashPath: mode === 'hash'
+			},
+			nativeUrl,
+			anchor,
+			searchIndex,
+			secondHashIndex;
+
+		if (typeof URL === 'function') {
+			// browsers that support `new URL()`
+			nativeUrl = new URL(location);
+			url.path = nativeUrl.pathname;
+			url.hash = nativeUrl.hash;
+			url.search = nativeUrl.search;
+		} else {
+			// IE
+			anchor = document.createElement('a');
+			anchor.href = location;
+			url.path = anchor.pathname;
+			if (url.path.charAt(0) !== '/') {
+				url.path = '/' + url.path;
+			}
+			url.hash = anchor.hash;
+			url.search = anchor.search;
+		}
+
+		// check for a hash path
+		if (url.hash.substring(0, 2) === '#/') {
+			// hash path
+			url.isHashPath = true;
+			url.path = url.hash.substring(1);
+		} else if (url.hash.substring(0, 3) === '#!/') {
+		// hashbang path
+			url.isHashPath = true;
+			url.path = url.hash.substring(2);
+		} else if (url.isHashPath) {
+		// still use the hash if mode="hash"
+			if (url.hash.length === 0) {
+				url.path = '/';
+			} else {
+				url.path = url.hash.substring(1);
+			}
+		}
+
+		if (url.isHashPath) {
+			url.hash = '';
+
+			// hash paths might have an additional hash in the hash path for scrolling to a specific part of the page #/hash/path#elementId
+			secondHashIndex = url.path.indexOf('#');
+			if (secondHashIndex !== -1) {
+				url.hash = url.path.substring(secondHashIndex);
+				url.path = url.path.substring(0, secondHashIndex);
+			}
+
+			// hash paths get the search from the hash if it exists
+			searchIndex = url.path.indexOf('?');
+			if (searchIndex !== -1) {
+				url.search = url.path.substring(searchIndex);
+				url.path = url.path.substring(0, searchIndex);
+			}
+		}
+		return url;
+	};
+
+	// testRoute(routePath, urlPath, trailingSlashOption, isRegExp) - Test if the route's path matches the URL's path
+	//
+	// Example routePath: '/user/:userId/**'
+	// Example urlPath = '/user/123/bio'
+	utilities.testRoute = function (routePath, urlPath, trailingSlashOption, isRegExp) {
+		// try to fail or succeed as quickly as possible for the most common cases
+
+		// handle trailing slashes (options: strict (default), ignore)
+		if (trailingSlashOption === 'ignore') {
+		// remove trailing / from the route path and URL path
+			if (urlPath.slice(-1) === '/') {
+				urlPath = urlPath.slice(0, -1);
+			}
+			if (routePath.slice(-1) === '/' && !isRegExp) {
+				routePath = routePath.slice(0, -1);
+			}
+		}
+
+		// test regular expressions
+		if (isRegExp) {
+			return utilities.testRegExString(routePath, urlPath);
+		}
+
+		// if the urlPath is an exact match or '*' then the route is a match
+		if (routePath === urlPath || routePath === '*') {
+			return true;
+		}
+
+		// relative routes a/b/c are the same as routes that start with a globstar /**/a/b/c
+		if (routePath.charAt(0) !== '/') {
+			routePath = '/**/' + routePath;
+		}
+
+		// recursively test if the segments match (start at 1 because 0 is always an empty string)
+		return segmentsMatch(routePath.split('/'), 1, urlPath.split('/'), 1);
+	};
+
+	// segmentsMatch(routeSegments, routeIndex, urlSegments, urlIndex, pathVariables)
+	// recursively test the route segments against the url segments in place (without creating copies of the arrays
+	// for each recursive call)
+	//
+	// example routeSegments ['', 'user', ':userId', '**']
+	// example urlSegments ['', 'user', '123', 'bio']
+	function segmentsMatch(routeSegments, routeIndex, urlSegments, urlIndex, pathVariables) {
+		var routeSegment = routeSegments[routeIndex],
+			urlSegment = urlSegments[urlIndex],
+			i;
+
+		// if we're at the last route segment and it is a globstar, it will match the rest of the url
+		if (routeSegment === '**' && routeIndex === routeSegments.length - 1) {
+			return true;
+		}
+
+		// we hit the end of the route segments or the url segments
+		if (typeof routeSegment === 'undefined' || typeof urlSegment === 'undefined') {
+		// return true if we hit the end of both at the same time meaning everything else matched, else return false
+			return routeSegment === urlSegment;
+		}
+
+		// if the current segments match, recursively test the remaining segments
+		if (routeSegment === urlSegment || routeSegment === '*' || routeSegment.charAt(0) === ':') {
+		// store the path variable if we have a pathVariables object
+			if (routeSegment.charAt(0) === ':' && typeof pathVariables !== 'undefined') {
+				pathVariables[routeSegment.substring(1)] = urlSegments[urlIndex];
+			}
+			return segmentsMatch(routeSegments, routeIndex + 1, urlSegments, urlIndex + 1, pathVariables);
+		}
+
+		// globstars can match zero to many URL segments
+		if (routeSegment === '**') {
+			// test if the remaining route segments match any combination of the remaining url segments
+			for (i = urlIndex; i < urlSegments.length; i += 1) {
+				if (segmentsMatch(routeSegments, routeIndex + 1, urlSegments, i, pathVariables)) {
+					return true;
+				}
+			}
+		}
+
+		// all tests failed, the route segments do not match the url segments
+		return false;
+	}
+
+	  // routeArguments(routePath, urlPath, search, isRegExp) - Gets the path variables and query parameter values from the URL
+	utilities.routeArguments = function (routePath, urlPath, search, isRegExp, typecast) {
+		var args = {},
+			queryParameters,
+			queryParameter,
+			queryParameterParts,
+			arg,
+			i;
+
+		// regular expressions can't have path variables
+		if (!isRegExp) {
+		// relative routes a/b/c are the same as routes that start with a globstar /**/a/b/c
+			if (routePath.charAt(0) !== '/') {
+				routePath = '/**/' + routePath;
+			}
+
+			// get path variables
+			// urlPath '/customer/123'
+			// routePath '/customer/:id'
+			// parses id = '123'
+			segmentsMatch(routePath.split('/'), 1, urlPath.split('/'), 1, args);
+		}
+
+		queryParameters = search.substring(1).split('&');
+		// split() on an empty string has a strange behavior of returning [''] instead of []
+		if (queryParameters.length === 1 && queryParameters[0] === '') {
+			queryParameters = [];
+		}
+		for (i = 0; i < queryParameters.length; i += 1) {
+			queryParameter = queryParameters[i];
+			queryParameterParts = queryParameter.split('=');
+			args[queryParameterParts[0]] = queryParameterParts.splice(1, queryParameterParts.length - 1).join('=');
+		}
+
+		if (typecast) {
+		// parse the arguments into unescaped strings, numbers, or booleans
+			for (arg in args) {
+				args[arg] = utilities.typecast(args[arg]);
+			}
+		}
+
+		return args;
+	};
+
+	// typecast(value) - Typecast the string value to an unescaped string, number, or boolean
+	utilities.typecast = function (value) {
+		// bool
+		if (value === 'true') {
+			return true;
+		}
+		if (value === 'false') {
+			return false;
+		}
+
+		// number
+		if (!isNaN(value) && value !== '' && value.charAt(0) !== '0') {
+			return +value;
+		}
+
+		// string
+		return decodeURIComponent(value);
+	};
+
+	// testRegExString(pattern, value) - Parse HTML attribute path="/^\/\w+\/\d+$/i" to a regular
+	// expression `new RegExp('^\/\w+\/\d+$', 'i')` and test against it.
+	//
+	// note that 'i' is the only valid option. global 'g', multiline 'm', and sticky 'y' won't be valid matchers for a path.
+	utilities.testRegExString = function (pattern, value) {
+		if (pattern.charAt(0) !== '/') {
+		// must start with a slash
+			return false;
+		}
+		pattern = pattern.slice(1);
+		var options = '';
+		if (pattern.slice(-1) === '/') {
+			pattern = pattern.slice(0, -1);
+		} else if (pattern.slice(-2) === '/i') {
+			pattern = pattern.slice(0, -2);
+			options = 'i';
+		} else {
+			// must end with a slash followed by zero or more options
+			return false;
+		}
+		return new RegExp(pattern, options).test(value);
+	};
 }());
 </script>
 </dom-module>
