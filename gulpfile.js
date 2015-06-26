@@ -22,57 +22,41 @@ var fs = require('fs');
 
 // Lint JavaScript
 gulp.task('jshint', function () {
-  return gulp.src([
-      'src/*.html',
-      'tests/**/*.js',
-      'test/**/*.html'
-    ])
-    .pipe(reload({stream: true, once: true}))
-    .pipe($.jshint.extract()) // Extract JS from .html files
-    .pipe($.jshint())
-    .pipe($.jshint.reporter('jshint-stylish'))
-    .pipe($.if(!browserSync.active, $.jshint.reporter('fail')));
+	return gulp.src([
+		'page-router.html'
+	])
+		.pipe(reload({stream: true, once: true}))
+		.pipe($.jshint.extract()) // Extract JS from .html files
+		.pipe($.jshint())
+		.pipe($.jshint.reporter('jshint-stylish'))
+		.pipe($.if(!browserSync.active, $.jshint.reporter('fail')));
 });
 
-
-gulp.task('vulcanize', function () {
-  var DEST_DIR = 'dist/';
-
-  return gulp.src('src/page-router.html')
-    .pipe($.vulcanize({
-      dest: DEST_DIR,
-      strip: true,
-      inlineCss: true,
-    }))
-    .pipe(gulp.dest(DEST_DIR));
-});
-
-
-// Clean Output Directory
-gulp.task('clean', del.bind(null, ['dist']));
 
 //
 gulp.task('serve', [], function () {
-  browserSync.init({
-    notify: false,
-    // Run as an https by uncommenting 'https: true'
-    // Note: this uses an unsigned certificate which on first access
-    //       will present a certificate warning in the browser.
-    // https: true,
-    server: {
-      baseDir: ['tests'],
-      directory: true,
-      routes: {
-        '/bower_components': 'bower_components',
-        '/bower_components/page-router': 'src'
-      }
-    }
-  });
-  gulp.watch(['src/*.html'], reload);
-  gulp.watch(['tests/**/*.html'], reload);
-  gulp.watch(['tests/**/*.js'], reload);
+	browserSync.init({
+		notify: false,
+		// Run as an https by uncommenting 'https: true'
+		// Note: this uses an unsigned certificate which on first access
+		//       will present a certificate warning in the browser.
+		// https: true,
+		server: {
+			baseDir: ['tests'],
+			directory: true,
+			routes: {
+				'/bower_components': 'bower_components',
+				'/bower_components/page-router': '.'
+			}
+		}
+	});
+	gulp.watch(['*.html'], reload);
+	gulp.watch(['tests/**/*.html'], reload);
+	gulp.watch(['tests/**/*.js'], reload);
 
 });
 
 gulp.task('default', ['serve']);
+
+
 
