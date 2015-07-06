@@ -33,14 +33,18 @@
 			onUrlChange: String,
 			active: Boolean,
 			regex: Boolean,
-			template: String
+			template: Boolean,
+			templateId: String
 		},
 		attached: function () {
 			console.log('page-route attached', this);
 		},
 		behaviors: [
 			Polymer.NeonAnimatableBehavior
-		]
+		],
+		_activateTemplate: function (template) {
+
+		}
 
 	});
 }());
@@ -279,7 +283,7 @@
 			function importLoadedCallback(e) {
 				importLink.loaded = true;
 				console.log('route imported', route);
-				router._activateImport(route, url, eventDetail);
+				router._activateImport(route, url, eventDetail, importLink);
 			}
 
 			function importErrorCallback(e) {
@@ -313,22 +317,35 @@
 					importLink.addEventListener('load', importLoadedCallback);
 					importLink.addEventListener('error', importErrorCallback);
 				} else {
-					this._activateImport(route, url, eventDetail);
+					this._activateImport(route, url, eventDetail, importLink);
 				}
 			}
 		},
 
 		_activateImport: function (route, url, eventDetail, importLink) {
+			var template;
 			route.importLink = importLink;
 			// make sure the user didn't navigate to a different route while it loaded
 			if (route === this._loadingRoute) {
 				if (route.template) {
-					console.log('route template, not implemented yet.');
+					if (route.templateId) {
+						template = importLink.import.getElementById(route.templateId);
+					} else {
+						template = importLink.import.querySelector('template');
+					}
+					this._activateTemplate(route, url, eventDetail, template);
 				} else {
 					// custom element
 					this._activateCustomElement(route, url, eventDetail, route.element || route.import.split('/').slice(-1)[0].replace('.html', ''));
 				}
 			}
+		},
+
+		_activateTemplate: function (route, url, eventDetail, template) {
+			var templateInstance = document.importNode(template.content, true),
+				model = this._createModel(route, url, eventDetail);
+			this._setObjectProperties(templateInstance, model);
+			this._activateElement(route, url, eventDetail, templateInstance);
 		},
 
 		_activateCustomElement: function (route, url, eventDetail, elementName) {
@@ -340,7 +357,7 @@
 			this._activateElement(route, url, eventDetail, customElement);
 		},
 
-		_activateElement: function (route, url, eventDetail, customElement) {
+		_activateElement: function (route, url, eventDetail, element) {
 			// previousRoute's content is removed in _completeSelectedChanged. When using neon-animation, this is done when animations are finished.
 			// If you navigate between 3 routes quickly (ex: /a -> /b -> /c) you might set previousRoute to '/b' before '/a' is
 			// removed from the DOM. this verifies old content is removed before switching the reference to previousRoute.
@@ -360,7 +377,7 @@
 			}
 
 			// add the new content
-			Polymer.dom(this._activeRoute).appendChild(customElement);
+			Polymer.dom(this._activeRoute.root).appendChild(element);
 
 			this.selected = this._activeRoute.path;
 
@@ -378,7 +395,7 @@
 			var node, nodeToRemove;
 			if (route) {
 				// remove the route content
-				node = Polymer.dom(route).firstChild;
+				node = Polymer.dom(route.root).firstChild;
 
 				// don't remove an inline <template>
 				if (route.isInlineTemplate) {
@@ -388,7 +405,7 @@
 				while (node) {
 					nodeToRemove = node;
 					node = Polymer.dom(node).nextSibling;
-					Polymer.dom(route).removeChild(nodeToRemove);
+					Polymer.dom(route.root).removeChild(nodeToRemove);
 				}
 			}
 		},
