@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+	<head>
+	  <meta charset="utf-8">
+	  <meta name="description" content="">
+	  <meta name="viewport" content="width=device-width, initial-scale=1">
+	  <script src="bower_components/webcomponentsjs/webcomponents-lite.js"></script>
+	  <link rel="import" href="bower_components/page-router/page-router.html">
+	  <link rel="import" href="elements/page-element1.html">
+	  <link rel="import" href="bower_components/neon-animation/neon-animations.html">
+	</head>
+	<body>
+		<h1> Simple test </h1>
+		<ul>
+			<li><a href="#/dom-bind-template/123">/dom-bind-template/123</a></li>
+			<li><a href="#/dom-bind-template/456">/dom-bind-template/456</a></li>
+		</ul>
+		<page-router
+			entry-animation="slide-from-left-animation" exit-animation="slide-right-animation"
+			on-missing-import="onMissingImport">
+			<page-route path="/dom-bind-template/:num" import="elements/dom-bind-template.html" template></page-route>
+		</page-router>
+
+			<script>
+/*globals window, document,Polymer */
+(function () {
+	"use strict";
+	var router = document.querySelector('page-router');
+	router.addEventListener('missing-import', function (e) {
+		console.log('missing import', e);
+	});
+
+
+
+	router.addEventListener('activate-route-end', function (e) {
+		console.log('activate-route-end', e);
+		var template = Polymer.dom(e.detail.route.root).querySelector('template[is=dom-bind]');
+		template.currentTime = new Date();
+	});
+
+}());
+</script>
+	</body>
+
+</html>

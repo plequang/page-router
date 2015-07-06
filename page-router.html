@@ -342,7 +342,7 @@
 		},
 
 		_activateTemplate: function (route, url, eventDetail, template) {
-			var templateInstance = document.importNode(template.content, true),
+			var templateInstance = document.importNode(template, true),
 				model = this._createModel(route, url, eventDetail);
 			this._setObjectProperties(templateInstance, model);
 			this._activateElement(route, url, eventDetail, templateInstance);
@@ -386,8 +386,8 @@
 				scrollToHash(url.hash);
 			}
 
-			this.fire('activate-route-end', eventDetail);
-			this.fire('activate-route-end', eventDetail);
+			fireEvent(this, 'activate-route-end', eventDetail);
+			fireEvent(route, 'activate-route-end', eventDetail);
 		},
 
 		// Remove the route's content
