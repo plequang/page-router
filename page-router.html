@@ -36,16 +36,9 @@
 			template: Boolean,
 			templateId: String
 		},
-		attached: function () {
-			console.log('page-route attached', this);
-		},
 		behaviors: [
 			Polymer.NeonAnimatableBehavior
-		],
-		_activateTemplate: function (template) {
-
-		}
-
+		]
 	});
 }());
 </script>
@@ -147,14 +140,17 @@
 		attached: function () {
 			console.log('attached');
 
-			if (this.init !== 'manual') {
-				// HACK: beware of elements initialization order, specially between page-router and its page-route's.
-				// Using async to be sure the page-route  are initialized when calling the stateChange handler for the first time.
-				this.async(function () {
-					this.initialize();
-				});
+			// HACK(pasleq): removing automatic initialization for now,
+			// as it often causes troubles.
 
-			}
+			// if (this.init !== 'manual') {
+			// 	// HACK: beware of elements initialization order, specially between page-router and its page-route's.
+			// 	// Using async to be sure the page-route  are initialized when calling the stateChange handler for the first time.
+			// 	this.async(function () {
+			// 		this.initialize();
+			// 	});
+
+			// }
 		},
 
 		initialize: function () {
@@ -165,7 +161,6 @@
 			var boundStateChangeHandler = this._stateChange.bind(this);
 			window.addEventListener('popstate', boundStateChangeHandler);
 			boundStateChangeHandler();
-
 			console.log('router initialized', this);
 		},
 

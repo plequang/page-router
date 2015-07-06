@@ -25,17 +25,20 @@
 /*globals window, document,Polymer */
 (function () {
 	"use strict";
-	var router = document.querySelector('page-router');
-	router.addEventListener('missing-import', function (e) {
-		console.log('missing import', e);
-	});
 
+	window.addEventListener('WebComponentsReady', function (e) {
+		var router = document.querySelector('page-router');
+		router.addEventListener('missing-import', function (e) {
+			console.log('missing import', e);
+		});
 
+		router.addEventListener('activate-route-end', function (e) {
+			console.log('activate-route-end', e);
+			var template = Polymer.dom(e.detail.route.root).querySelector('template[is=dom-bind]');
+			template.currentTime = new Date();
+		});
 
-	router.addEventListener('activate-route-end', function (e) {
-		console.log('activate-route-end', e);
-		var template = Polymer.dom(e.detail.route.root).querySelector('template[is=dom-bind]');
-		template.currentTime = new Date();
+		router.initialize();
 	});
 
 }());

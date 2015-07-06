@@ -20,5 +20,17 @@
 			<page-route path="/test2" element="page-element2"></page-route>
 		</page-router>
 	</body>
+		<script>
+/*globals window, document */
+(function () {
+	"use strict";
 
+	console.log('test-features script');
+
+	window.addEventListener('WebComponentsReady', function (e) {
+		var router = document.querySelector('page-router');
+		router.initialize();
+	});
+}());
+</script>
 </html>

@@ -21,8 +21,7 @@
 			<li><a href="#/missing-import">/missing-import</a></li>
 		</ul>
 		<page-router
-			entry-animation="slide-from-left-animation" exit-animation="slide-right-animation"
-			on-missing-import="onMissingImport">
+			entry-animation="slide-from-left-animation" exit-animation="slide-right-animation">
 			<page-route path="/page-element1" element="page-element1"></page-route>
 			<page-route path="/page-element2" element="page-element2" import="elements/page-element2.html"></page-route>
 			<page-route path="/databind-element/:num" element="databind-element" import="elements/databind-element.html"></page-route>
@@ -35,11 +34,20 @@
 /*globals window, document */
 (function () {
 	"use strict";
-	var router = document.querySelector('page-router');
-	router.addEventListener('missing-import', function (e) {
-		console.log('missing import', e);
-	});
 
+	console.log('test-features script');
+
+	window.addEventListener('WebComponentsReady', function (e) {
+		var router = document.querySelector('page-router');
+		router.addEventListener('import-error', function (e) {
+			console.log('import-error', e);
+		});
+
+		router.addEventListener('state-change', function (e) {
+			console.log('page-router state-change', e);
+		});
+		router.initialize();
+	});
 }());
 </script>
 	</body>
