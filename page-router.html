@@ -328,11 +328,10 @@
 			// make sure the user didn't navigate to a different route while it loaded
 			if (route === this._loadingRoute) {
 				if (route.template) {
-					if (route.templateId) {
-						template = importLink.import.getElementById(route.templateId);
-					} else {
-						template = importLink.import.querySelector('template');
-					}
+					template = importLink.import.querySelector('template');
+					this._activateTemplate(route, url, eventDetail, template);
+				} else if (route.templateId) {
+					template = importLink.import.getElementById(route.templateId);
 					this._activateTemplate(route, url, eventDetail, template);
 				} else {
 					// custom element
@@ -342,8 +341,17 @@
 		},
 
 		_activateTemplate: function (route, url, eventDetail, template) {
-			var templateInstance = document.importNode(template, true),
-				model = this._createModel(route, url, eventDetail);
+			var templateInstance, model;
+
+			// HACK(plequang) : if this is a dom-bind template, then import the template node,
+			// otherwise import the content.
+			if (template.hasAttribute('is') || template.getAttribute('is') === 'dom-bind') {
+				templateInstance = document.importNode(template, true);
+			} else {
+				templateInstance = document.importNode(template.content, true);
+			}
+
+			model = this._createModel(route, url, eventDetail);
 			this._setObjectProperties(templateInstance, model);
 			this._activateElement(route, url, eventDetail, templateInstance);
 		},

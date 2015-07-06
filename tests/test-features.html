@@ -17,6 +17,7 @@
 			<li><a href="#/databind-element/123">/databind-element/123</a></li>
 			<li><a href="#/databind-element/456">/databind-element/456</a></li>
 			<li><a href="#/import-template">/import-template</a></li>
+			<li><a href="#/import-template-id">/import-template-id</a></li>
 			<li><a href="#/missing-import">/missing-import</a></li>
 		</ul>
 		<page-router
@@ -26,6 +27,7 @@
 			<page-route path="/page-element2" element="page-element2" import="elements/page-element2.html"></page-route>
 			<page-route path="/databind-element/:num" element="databind-element" import="elements/databind-element.html"></page-route>
 			<page-route path="/import-template" import="elements/template-page.html" template></page-route>
+			<page-route path="/import-template-id" import="elements/template-id-page.html" template-id="templateIdPage"></page-route>
 			<page-route path="/missing-import" element="missing-import" import="elements/missing-import.html"></page-route>
 		</page-router>
 
